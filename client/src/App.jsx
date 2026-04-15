@@ -8,8 +8,18 @@ const API_URL = 'https://tcg-toy.onrender.com/api';
 function App() {
   const [users, setUsers] = useState([]);
   const [selectedIds, setSelectedIds] = useState([]);
+  
+  // 상점 관련 상태
+  const [isShopOpen, setIsShopOpen] = useState(false);
+  const [currentBuyer, setCurrentBuyer] = useState(null);
+  const [shopItems, setShopItems] = useState([
+    // DB에서 불러오기 전 사용할 임시 데이터 (TCG 테마)
+    { id: 1, name: '기본 부스터 팩', cost: 3 },
+    { id: 2, name: '프리미엄 카드 슬리브', cost: 5 },
+    { id: 3, name: '스페셜 프로모 카드', cost: 10 }
+  ]);
 
-  // DB에서 데이터 불러오기
+  // DB에서 유저 데이터 불러오기
   const fetchUsers = async () => {
     try {
       const res = await axios.get(`${API_URL}/users`);
@@ -19,7 +29,21 @@ function App() {
     }
   };
 
-  useEffect(() => { fetchUsers(); }, []);
+  // (선택사항) DB에서 상점 아이템 불러오기
+  const fetchShopItems = async () => {
+    try {
+      // 백엔드에 /shop 엔드포인트가 생기면 주석 해제하세요!
+      // const res = await axios.get(`${API_URL}/shop`);
+      // setShopItems(res.data);
+    } catch (err) {
+      console.error("상점 데이터 로드 실패", err);
+    }
+  };
+
+  useEffect(() => { 
+    fetchUsers(); 
+    fetchShopItems();
+  }, []);
 
   const handleAddPlayer = async () => {
     const name = prompt("추가할 플레이어의 이름을 입력하세요:");
@@ -53,6 +77,41 @@ function App() {
   const getWinRate = (u) => {
     const total = u.wins + u.losses;
     return total > 0 ? (u.wins / total) : 0;
+  };
+
+  // 상점 모달 열기/닫기
+  const openShop = (user) => {
+    setCurrentBuyer(user);
+    setIsShopOpen(true);
+  };
+
+  const closeShop = () => {
+    setIsShopOpen(false);
+    setCurrentBuyer(null);
+  };
+
+  // 상품 구매 로직
+  const handlePurchase = async (item) => {
+    if (currentBuyer.points < item.cost) {
+      alert(`승점이 부족합니다! (현재: ${currentBuyer.points}점 / 필요: ${item.cost}점)`);
+      return;
+    }
+
+    if (window.confirm(`[${item.name}]을(를) ${item.cost}점에 구매하시겠습니까?`)) {
+      try {
+        // 백엔드로 구매 요청 전송 (유저 ID와 소모할 비용)
+        await axios.post(`${API_URL}/buy`, { 
+          userId: currentBuyer.id, 
+          cost: item.cost 
+        });
+        alert("구매 완료!");
+        fetchUsers(); // 승점 갱신을 위해 유저 목록 다시 불러오기
+        closeShop();
+      } catch (err) {
+        console.error("구매 실패", err);
+        alert("구매 처리 중 오류가 발생했습니다.");
+      }
+    }
   };
 
   // 정렬 로직 (1순위: 승점, 2순위: 승률)
@@ -90,7 +149,9 @@ function App() {
 
         <table>
           <thead>
-            <tr><th>순위</th><th>이름</th><th>라운드</th><th>승/패</th><th>승률</th><th>현재 연승</th><th>승점</th></tr>
+            <tr>
+              <th>순위</th><th>이름</th><th>라운드</th><th>승/패</th><th>승률</th><th>현재 연승</th><th>승점</th><th>상점</th>
+            </tr>
           </thead>
           <tbody>
             {sortedUsers.map((u, index) => {
@@ -110,14 +171,62 @@ function App() {
                   <td>{winRate}%</td>
                   <td>{u.win_streak > 0 ? <span style={{ color: '#2980b9', fontWeight: 'bold' }}>{u.win_streak}연승 🔥</span> : '-'}</td>
                   <td style={{ fontSize: '1.2em', color: '#d35400' }}><strong>{u.points}</strong></td>
+                  <td>
+                    {/* 상점 버튼: 클릭 이벤트가 tr로 전파되는 것을 막음 */}
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); openShop(u); }}
+                      style={{ padding: '4px 8px', fontSize: '12px', backgroundColor: '#8e44ad' }}
+                    >
+                      🛒 상점
+                    </button>
+                  </td>
                 </tr>
               )
             })}
           </tbody>
         </table>
       </div>
+
+      {/* 상점 모달창 UI */}
+      {isShopOpen && currentBuyer && (
+        <div className="modal-overlay" style={modalOverlayStyle}>
+          <div className="modal-content" style={modalContentStyle}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '2px solid #eee', paddingBottom: '10px', marginBottom: '15px' }}>
+              <h3 style={{ margin: 0 }}>🛒 {currentBuyer.name}님의 상점</h3>
+              <span style={{ fontWeight: 'bold', color: '#d35400' }}>보유 승점: {currentBuyer.points}점</span>
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {shopItems.map(item => (
+                <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', border: '1px solid #ddd', borderRadius: '4px' }}>
+                  <span>{item.name}</span>
+                  <button 
+                    onClick={() => handlePurchase(item)}
+                    style={{ backgroundColor: currentBuyer.points >= item.cost ? '#27ae60' : '#bdc3c7' }}
+                  >
+                    {item.cost}점 구매
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <button onClick={closeShop} style={{ marginTop: '20px', width: '100%', backgroundColor: '#7f8c8d' }}>닫기</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
+// 모달창 스타일 (App.css에 넣어도 됩니다)
+const modalOverlayStyle = {
+  position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+  backgroundColor: 'rgba(0, 0, 0, 0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000
+};
+
+const modalContentStyle = {
+  backgroundColor: 'white', padding: '25px', borderRadius: '8px',
+  width: '350px', maxWidth: '90%', boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+};
 
 export default App;

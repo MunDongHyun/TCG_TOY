@@ -119,3 +119,27 @@ app.post('/api/reset', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`🚀 MySQL Server running on port ${PORT}`);
 });
+
+
+// [상품 구매 처리 API]
+app.post('/api/buy', async (req, res) => {
+  const { userId, cost } = req.body;
+  
+  try {
+    // 1. 유저의 현재 승점 확인
+    const [users] = await pool.query('SELECT points FROM users WHERE id = ?', [userId]);
+    if (users.length === 0) return res.status(404).json({ error: 'User not found' });
+    
+    if (users[0].points < cost) {
+      return res.status(400).json({ error: 'Not enough points' });
+    }
+
+    // 2. 승점 차감
+    await pool.query('UPDATE users SET points = points - ? WHERE id = ?', [cost, userId]);
+    
+    res.json({ message: 'Purchase successful' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Database error' });
+  }
+});
