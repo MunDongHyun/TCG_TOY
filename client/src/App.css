@@ -182,3 +182,54 @@
     border-right-color: var(--border);
   }
 }
+
+/* 1. 무지개 배경 (보노보노 PPT의 핵심) */
+.bono-container {
+  min-height: 100vh;
+  background: linear-gradient(to right, #ff9999, #ffcc99, #ffff99, #ccff99, #99ffcc, #99ffff, #99ccff, #cc99ff);
+  font-family: 'Gulim', '굴림', sans-serif; /* 폰트는 무조건 굴림체 스타일 */
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* 2. 제목 (노란색 글자 + 검정 테두리) */
+.bono-title {
+  font-size: 3rem;
+  color: #ffff00;
+  text-shadow: 3px 3px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000;
+  margin-bottom: 30px;
+}
+
+/* 3. 랭킹 테이블 (민트색 배경 + 굵은 테두리) */
+.bono-table {
+  background-color: #99ffcc;
+  border: 5px solid #000;
+  border-radius: 15px;
+  width: 90%;
+  max-width: 1000px;
+  border-collapse: separate;
+  overflow: hidden;
+}
+
+.bono-table th {
+  background-color: #00cccc;
+  color: white;
+  padding: 15px;
+  border-bottom: 3px solid #000;
+}
+
+.bono-table td {
+  padding: 12px;
+  text-align: center;
+  font-weight: bold;
+  border-bottom: 1px solid #000;
+}
+
+/* 4. 보노보노 캐릭터 배치 */
+.bono-char {
+  position: absolute;
+  width: 150px;
+  z-index: 10;
+}
