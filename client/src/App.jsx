@@ -69,7 +69,7 @@ function App() {
     <div className="App">
       <div className="page">
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
-          <h2>🏆 TCG 실시간 랭킹 (MySQL 연동)</h2>
+          <h2>실시간 랭킹</h2>
           <div style={{ display: 'flex', gap: '8px' }}>
             <button onClick={handleGlobalUndo} disabled={!canUndo} style={{ backgroundColor: canUndo ? '#f39c12' : '#bdc3c7' }}>⏪ 최근 매치 취소</button>
             <button onClick={handleResetAll} style={{ backgroundColor: '#e67e22' }}>🔄 전체 초기화</button>

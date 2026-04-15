@@ -12,7 +12,7 @@ const pool = mysql.createPool({
   host: 'gateway01.ap-northeast-1.prod.aws.tidbcloud.com',
   port: 4000,
   user: '4JDCF27q5TzRWHN.root',
-  password: 'Myc5Kx1q5Jhd4pHm', // ⭐️ 환경변수 대신 직접 입력해버리기
+  password: 'Myc5Kx1q5Jhd4pHm', 
   database: 'tcg_db',
   ssl: {
     minVersion: 'TLSv1.2',
