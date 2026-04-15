@@ -3,7 +3,7 @@ import axios from 'axios';
 import './index.css';
 
 // Node.js 서버 주소
-const API_URL = 'http://localhost:8081/api';
+const API_URL = 'https://tcg-toy.onrender.com/api';
 
 function App() {
   const [users, setUsers] = useState([]);
