@@ -9,10 +9,10 @@ app.use(cors());
 app.use(express.json());
 
 const pool = mysql.createPool({
-  host: 'gateway01.ap-northeast-1.prod.aws.tidbcloud.com', // TiDB Endpoint 주소
-  port: 4000, 
-  user: '4JDCF27q5TzRWHN.root', 
-  password: process.env.DB_PASSWORD,
+  host: 'gateway01.ap-northeast-1.prod.aws.tidbcloud.com',
+  port: 4000,
+  user: '4JDCF27q5TzRWHN.root',
+  password: 'Myc5Kx1q5Jhd4pHm', // ⭐️ 환경변수 대신 직접 입력해버리기
   database: 'tcg_db',
   ssl: {
     minVersion: 'TLSv1.2',
