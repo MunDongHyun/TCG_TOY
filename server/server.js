@@ -24,28 +24,21 @@ const pool = mysql.createPool({
 // 🧑‍🤝‍🧑 [유저 및 게임 매치 API]
 // ==========================================
 
-// 1. 모든 유저 정보 가져오기
 app.get('/api/users', async (req, res) => {
   try {
     const [rows] = await pool.query('SELECT * FROM users');
     res.json(rows);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 2. 새 플레이어 추가
 app.post('/api/users', async (req, res) => {
   const { name } = req.body;
   try {
     await pool.query('INSERT INTO users (name, history) VALUES (?, ?)', [name, JSON.stringify([])]);
     res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 3. 매치 결과 반영
 app.post('/api/match', async (req, res) => {
   const { winnerId, loserId } = req.body;
   const matchId = Date.now();
@@ -57,13 +50,10 @@ app.post('/api/match', async (req, res) => {
     const nextWinStreak = winner.win_streak + 1;
     const addedPoints = nextWinStreak >= 2 ? 5 : 3;
     const winnerSnapshot = JSON.stringify([...(winner.history || []), { 
-      points: winner.points, wins: winner.wins, losses: winner.losses, 
-      win_streak: winner.win_streak, lose_streak: winner.lose_streak, matchId 
+      points: winner.points, wins: winner.wins, losses: winner.losses, win_streak: winner.win_streak, lose_streak: winner.lose_streak, matchId 
     }]);
-
     const loserSnapshot = JSON.stringify([...(loser.history || []), { 
-      points: loser.points, wins: loser.wins, losses: loser.losses, 
-      win_streak: loser.win_streak, lose_streak: loser.lose_streak, matchId 
+      points: loser.points, wins: loser.wins, losses: loser.losses, win_streak: loser.win_streak, lose_streak: loser.lose_streak, matchId 
     }]);
 
     await pool.query('UPDATE users SET points=points+?, wins=wins+1, win_streak=?, lose_streak=0, history=? WHERE id=?', 
@@ -72,12 +62,9 @@ app.post('/api/match', async (req, res) => {
       [loserSnapshot, loserId]);
 
     res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 4. 최근 매치 취소
 app.post('/api/undo', async (req, res) => {
   try {
     const [users] = await pool.query('SELECT id, history FROM users');
@@ -102,57 +89,46 @@ app.post('/api/undo', async (req, res) => {
       }
     }
     res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 5. 전체 데이터 초기화
 app.post('/api/reset', async (req, res) => {
   try {
     await pool.query('UPDATE users SET points=0, wins=0, losses=0, win_streak=0, lose_streak=0, history=JSON_ARRAY()');
     res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 
 // ==========================================
-// 🛒 [상점 관리 및 구매 API (MySQL 연동 완료)]
+// 🛒 [상점 관리 및 구매 API (수량 로직 추가)]
 // ==========================================
 
-// 6. 상점 전체 상품 목록 조회
+// 6. 전체 상품 목록 조회
 app.get('/api/shop', async (req, res) => {
   try {
     const [rows] = await pool.query('SELECT * FROM shop_items');
     res.json(rows);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 7. 새 상품 추가
+// 7. 새 상품 추가 (stock 포함)
 app.post('/api/shop', async (req, res) => {
-  const { name, cost } = req.body;
+  const { name, cost, stock } = req.body;
   try {
-    await pool.query('INSERT INTO shop_items (name, cost) VALUES (?, ?)', [name, cost]);
+    await pool.query('INSERT INTO shop_items (name, cost, stock) VALUES (?, ?, ?)', [name, cost, stock || 0]);
     res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 8. 기존 상품 내용 수정
+// 8. 기존 상품 내용 변경 (stock 포함)
 app.put('/api/shop/:id', async (req, res) => {
   const { id } = req.params;
-  const { name, cost } = req.body;
+  const { name, cost, stock } = req.body;
   try {
-    await pool.query('UPDATE shop_items SET name=?, cost=? WHERE id=?', [name, cost, id]);
+    await pool.query('UPDATE shop_items SET name=?, cost=?, stock=? WHERE id=?', [name, cost, stock, id]);
     res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // 9. 상품 삭제
@@ -161,23 +137,28 @@ app.delete('/api/shop/:id', async (req, res) => {
   try {
     await pool.query('DELETE FROM shop_items WHERE id=?', [id]);
     res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 10. 상점 상품 구매 (포인트 차감 검증)
+// 10. 상점 상품 구매 (포인트 확인 및 재고 1 차감)
 app.post('/api/buy', async (req, res) => {
-  const { userId, cost } = req.body;
+  const { userId, cost, itemId } = req.body;
+  
   try {
+    // 1. 유저의 승점 확인
     const [users] = await pool.query('SELECT points FROM users WHERE id = ?', [userId]);
     if (users.length === 0) return res.status(404).json({ error: '유저를 찾을 수 없습니다.' });
-    
-    if (users[0].points < cost) {
-      return res.status(400).json({ error: '승점이 부족합니다.' });
-    }
+    if (users[0].points < cost) return res.status(400).json({ error: '승점이 부족합니다.' });
 
+    // 2. 아이템 재고 확인
+    const [items] = await pool.query('SELECT stock FROM shop_items WHERE id = ?', [itemId]);
+    if (items.length === 0) return res.status(404).json({ error: '상품을 찾을 수 없습니다.' });
+    if (items[0].stock <= 0) return res.status(400).json({ error: '재고가 소진되었습니다.' });
+
+    // 3. 승점 차감 및 재고 1 차감
     await pool.query('UPDATE users SET points = points - ? WHERE id = ?', [cost, userId]);
+    await pool.query('UPDATE shop_items SET stock = stock - 1 WHERE id = ?', [itemId]);
+    
     res.json({ success: true, message: '구매 완료' });
   } catch (err) {
     console.error(err);
@@ -186,7 +167,7 @@ app.post('/api/buy', async (req, res) => {
 });
 
 // ==========================================
-// 서버 실행 (반드시 파일 맨 아래에 위치)
+// 서버 실행
 // ==========================================
 app.listen(PORT, () => {
   console.log(`🚀 MySQL Server running on port ${PORT}`);

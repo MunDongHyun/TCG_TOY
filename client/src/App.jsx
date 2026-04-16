@@ -2,40 +2,24 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import './index.css';
 
-// Node.js 서버 주소
 const API_URL = 'https://tcg-toy.onrender.com/api';
 
-// ==========================================
-// [1] 최상위 App 컴포넌트 (탭 메뉴 라우팅)
-// ==========================================
 export default function App() {
-  const [currentPage, setCurrentPage] = useState('main'); // 'main' 또는 'shopAdmin'
+  const [currentPage, setCurrentPage] = useState('main');
 
   return (
     <div className="App">
-      {/* 💡 상단 관리자 이동 탭 버튼 */}
       <div style={navBarStyle}>
-        <button 
-          onClick={() => setCurrentPage('main')} 
-          style={currentPage === 'main' ? activeTabStyle : inactiveTabStyle}
-        >
-          🏆 실시간 랭킹
-        </button>
-        <button 
-          onClick={() => setCurrentPage('shopAdmin')} 
-          style={currentPage === 'shopAdmin' ? activeTabStyle : inactiveTabStyle}
-        >
-          ⚙️ 상점 아이템 관리
-        </button>
+        <button onClick={() => setCurrentPage('main')} style={currentPage === 'main' ? activeTabStyle : inactiveTabStyle}>🏆 실시간 랭킹</button>
+        <button onClick={() => setCurrentPage('shopAdmin')} style={currentPage === 'shopAdmin' ? activeTabStyle : inactiveTabStyle}>⚙️ 상점 아이템 관리</button>
       </div>
-
       {currentPage === 'main' ? <MainPage /> : <ShopAdmin />}
     </div>
   );
 }
 
 // ==========================================
-// [2] 메인 페이지 (랭킹 & 상점 구매)
+// [2] 메인 페이지 (상점 재고 연동 및 구매)
 // ==========================================
 function MainPage() {
   const [users, setUsers] = useState([]);
@@ -50,72 +34,68 @@ function MainPage() {
     try {
       const res = await axios.get(`${API_URL}/users`);
       setUsers(res.data);
-    } catch (err) { console.error("데이터 로드 실패", err); } 
-    finally { setIsLoading(false); }
+    } catch (err) { console.error(err); } finally { setIsLoading(false); }
   };
 
   const fetchShopItems = async () => {
     try {
       const res = await axios.get(`${API_URL}/shop`);
       setShopItems(res.data);
-    } catch (err) { console.error("상점 데이터 로드 실패", err); }
+    } catch (err) { console.error(err); }
   };
 
-  useEffect(() => { 
-    fetchUsers(); 
-    fetchShopItems();
-  }, []);
+  useEffect(() => { fetchUsers(); fetchShopItems(); }, []);
 
   const handleAddPlayer = async () => {
     const name = prompt("추가할 플레이어의 이름을 입력하세요:");
     if (!name) return;
     setIsLoading(true);
-    try {
-      await axios.post(`${API_URL}/users`, { name });
-      await fetchUsers();
-    } catch (err) { setIsLoading(false); }
+    await axios.post(`${API_URL}/users`, { name });
+    await fetchUsers();
   };
 
   const handleMatchResult = async (winnerId, loserId) => {
     setIsLoading(true);
-    try {
-      await axios.post(`${API_URL}/match`, { winnerId, loserId });
-      setSelectedIds([]);
-      await fetchUsers();
-    } catch (err) { setIsLoading(false); }
+    await axios.post(`${API_URL}/match`, { winnerId, loserId });
+    setSelectedIds([]);
+    await fetchUsers();
   };
 
   const handleGlobalUndo = async () => {
     setIsLoading(true);
-    try {
-      await axios.post(`${API_URL}/undo`);
-      await fetchUsers();
-    } catch (err) { setIsLoading(false); }
+    await axios.post(`${API_URL}/undo`);
+    await fetchUsers();
   };
 
   const handleResetAll = async () => {
     if (window.confirm("⚠️ 전체 초기화하시겠습니까?")) {
       setIsLoading(true);
-      try {
-        await axios.post(`${API_URL}/reset`);
-        await fetchUsers();
-      } catch (err) { setIsLoading(false); }
+      await axios.post(`${API_URL}/reset`);
+      await fetchUsers();
     }
   };
 
   const handlePurchase = async (item) => {
     if (currentBuyer.points < item.cost) {
-      alert(`승점이 부족합니다! (현재: ${currentBuyer.points}점 / 필요: ${item.cost}점)`);
-      return;
+      return alert(`승점이 부족합니다! (현재: ${currentBuyer.points}점 / 필요: ${item.cost}점)`);
     }
-    if (window.confirm(`[${item.name}]을(를) ${item.cost}점에 구매하시겠습니까?`)) {
+    if (item.stock <= 0) {
+      return alert("재고가 모두 소진되었습니다!");
+    }
+
+    if (window.confirm(`[${item.name}]을(를) ${item.cost}점에 구매하시겠습니까? (남은 수량: ${item.stock}개)`)) {
       setIsLoading(true);
       try {
-        await axios.post(`${API_URL}/buy`, { userId: currentBuyer.id, cost: item.cost });
+        // 구매 시 아이템 ID(itemId)도 함께 넘겨줍니다.
+        await axios.post(`${API_URL}/buy`, { userId: currentBuyer.id, cost: item.cost, itemId: item.id });
         alert("구매 완료!");
         await fetchUsers(); 
+        await fetchShopItems(); // 재고 갱신을 위해 상점 목록 다시 불러오기
         setIsShopOpen(false);
-      } catch (err) { alert("구매 처리 중 오류 발생"); setIsLoading(false); }
+      } catch (err) { 
+        alert(err.response?.data?.error || "구매 처리 중 오류 발생"); 
+        setIsLoading(false); 
+      }
     }
   };
 
@@ -156,7 +136,7 @@ function MainPage() {
         </thead>
         <tbody>
           {sortedUsers.map((u, i) => (
-            <tr key={u.id} onClick={() => toggleSelect(u.id)} style={{ backgroundColor: selectedIds.includes(u.id) ? '#e3f2fd' : 'transparent' }}>
+            <tr key={u.id} onClick={() => toggleSelect(u.id)} style={{ backgroundColor: selectedIds.includes(u.id) ? '#e3f2fd' : 'transparent', cursor: 'pointer' }}>
               <td>{i + 1}위</td>
               <td><strong>{u.name}</strong></td>
               <td>{u.wins + u.losses}R</td>
@@ -176,9 +156,20 @@ function MainPage() {
             <h3>🛒 {currentBuyer.name}님의 상점 (보유: {currentBuyer.points}점)</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               {shopItems.map(item => (
-                <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px', border: '1px solid #ddd' }}>
-                  <span>{item.name}</span>
-                  <button onClick={() => handlePurchase(item)} style={{ backgroundColor: currentBuyer.points >= item.cost ? '#27ae60' : '#bdc3c7' }}>{item.cost}점 구매</button>
+                <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', border: '1px solid #ddd' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <span style={{ fontWeight: 'bold' }}>{item.name}</span>
+                    <span style={{ fontSize: '12px', color: item.stock > 0 ? '#27ae60' : '#e74c3c' }}>
+                      {item.stock > 0 ? `남은 수량: ${item.stock}개` : '품절 (Sold Out)'}
+                    </span>
+                  </div>
+                  <button 
+                    onClick={() => handlePurchase(item)} 
+                    disabled={item.stock <= 0}
+                    style={{ backgroundColor: (currentBuyer.points >= item.cost && item.stock > 0) ? '#27ae60' : '#bdc3c7' }}
+                  >
+                    {item.cost}점 구매
+                  </button>
                 </div>
               ))}
             </div>
@@ -191,13 +182,18 @@ function MainPage() {
 }
 
 // ==========================================
-// [3] 상점 아이템 관리자 페이지
+// [3] 상점 아이템 관리자 페이지 (인라인 수정)
 // ==========================================
 function ShopAdmin() {
   const [items, setItems] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [form, setForm] = useState({ name: '', cost: '' });
-  const [editId, setEditId] = useState(null);
+  
+  // 새 상품 추가 폼
+  const [form, setForm] = useState({ name: '', cost: '', stock: '' });
+  
+  // 특정 행 인라인 수정 폼
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState({ name: '', cost: '', stock: '' });
 
   const fetchItems = async () => {
     setIsLoading(true);
@@ -207,16 +203,35 @@ function ShopAdmin() {
 
   useEffect(() => { fetchItems(); }, []);
 
-  const handleSave = async () => {
-    if (!form.name || !form.cost) return;
+  // 새 상품 추가
+  const handleAdd = async () => {
+    if (!form.name || !form.cost || !form.stock) return alert("상품명, 가격, 수량을 모두 입력해주세요.");
     setIsLoading(true);
     try {
-      if (editId) await axios.put(`${API_URL}/shop/${editId}`, form);
-      else await axios.post(`${API_URL}/shop`, form);
-      setForm({ name: '', cost: '' }); setEditId(null); await fetchItems();
+      await axios.post(`${API_URL}/shop`, { name: form.name, cost: Number(form.cost), stock: Number(form.stock) });
+      setForm({ name: '', cost: '', stock: '' }); 
+      await fetchItems();
     } catch(err) { setIsLoading(false); }
   };
 
+  // 인라인 수정 모드 켜기
+  const startEdit = (item) => {
+    setEditingId(item.id);
+    setEditForm({ name: item.name, cost: item.cost, stock: item.stock });
+  };
+
+  // 인라인 수정 완료 (저장)
+  const saveEdit = async (id) => {
+    if (!editForm.name || !editForm.cost || editForm.stock === '') return alert("모든 값을 입력해주세요.");
+    setIsLoading(true);
+    try {
+      await axios.put(`${API_URL}/shop/${id}`, { name: editForm.name, cost: Number(editForm.cost), stock: Number(editForm.stock) });
+      setEditingId(null);
+      await fetchItems();
+    } catch (err) { setIsLoading(false); }
+  };
+
+  // 상품 삭제
   const handleDelete = async (id) => {
     if (!window.confirm("삭제할까요?")) return;
     setIsLoading(true);
@@ -228,25 +243,47 @@ function ShopAdmin() {
     <div className="page">
       {isLoading && <LoadingOverlay />}
       <h2>⚙️ 상점 아이템 관리</h2>
+      
+      {/* 새 상품 등록 영역 */}
       <div style={{ display:'flex', gap:'10px', background:'#eee', padding:'15px', borderRadius:'8px', marginBottom:'20px' }}>
-        <input placeholder="상품명" value={form.name} onChange={e=>setForm({...form, name: e.target.value})} />
-        <input type="number" placeholder="가격" value={form.cost} onChange={e=>setForm({...form, cost: e.target.value})} />
-        <button onClick={handleSave} style={{backgroundColor:'#27ae60'}}>{editId ? '수정완료' : '+ 등록'}</button>
-        {editId && <button onClick={()=>{setEditId(null); setForm({name:'', cost:''})}} style={{backgroundColor:'#7f8c8d'}}>취소</button>}
+        <input placeholder="상품명" value={form.name} onChange={e=>setForm({...form, name: e.target.value})} style={{ flex: 2 }}/>
+        <input type="number" placeholder="가격(승점)" value={form.cost} onChange={e=>setForm({...form, cost: e.target.value})} style={{ flex: 1 }}/>
+        <input type="number" placeholder="초기 수량" value={form.stock} onChange={e=>setForm({...form, stock: e.target.value})} style={{ flex: 1 }}/>
+        <button onClick={handleAdd} style={{backgroundColor:'#27ae60'}}>+ 상품 등록</button>
       </div>
 
       <table>
-        <thead><tr><th>상품명</th><th>가격</th><th>관리</th></tr></thead>
+        <thead><tr><th>ID</th><th>상품명</th><th>가격</th><th>재고 수량</th><th>관리</th></tr></thead>
         <tbody>
           {items.map(item => (
             <tr key={item.id}>
-              <td>{item.name}</td><td>{item.cost}점</td>
-              <td>
-                <button onClick={()=>{setEditId(item.id); setForm({name: item.name, cost: item.cost})}} style={{backgroundColor:'#f39c12', marginRight:'5px'}}>수정</button>
-                <button onClick={()=>handleDelete(item.id)} style={{backgroundColor:'#e74c3c'}}>삭제</button>
-              </td>
+              <td>{item.id}</td>
+              {editingId === item.id ? (
+                // 💡 인라인 수정 모드 (해당 행이 입력창으로 변함)
+                <>
+                  <td><input type="text" value={editForm.name} onChange={e=>setEditForm({...editForm, name: e.target.value})} style={{ width: '100%', padding: '5px' }} /></td>
+                  <td><input type="number" value={editForm.cost} onChange={e=>setEditForm({...editForm, cost: e.target.value})} style={{ width: '60px', padding: '5px' }} /></td>
+                  <td><input type="number" value={editForm.stock} onChange={e=>setEditForm({...editForm, stock: e.target.value})} style={{ width: '60px', padding: '5px' }} /></td>
+                  <td>
+                    <button onClick={() => saveEdit(item.id)} style={{backgroundColor:'#3498db', marginRight:'5px'}}>저장</button>
+                    <button onClick={() => setEditingId(null)} style={{backgroundColor:'#95a5a6'}}>취소</button>
+                  </td>
+                </>
+              ) : (
+                // 💡 일반 모드
+                <>
+                  <td>{item.name}</td>
+                  <td style={{ color: '#d35400', fontWeight: 'bold' }}>{item.cost}점</td>
+                  <td>{item.stock}개</td>
+                  <td>
+                    <button onClick={() => startEdit(item)} style={{backgroundColor:'#f39c12', marginRight:'5px'}}>수정</button>
+                    <button onClick={() => handleDelete(item.id)} style={{backgroundColor:'#e74c3c'}}>삭제</button>
+                  </td>
+                </>
+              )}
             </tr>
           ))}
+          {items.length === 0 && <tr><td colSpan="5" style={{ textAlign: 'center', padding: '20px' }}>등록된 상품이 없습니다.</td></tr>}
         </tbody>
       </table>
     </div>
