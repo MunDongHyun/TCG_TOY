@@ -9,6 +9,9 @@ function App() {
   const [users, setUsers] = useState([]);
   const [selectedIds, setSelectedIds] = useState([]);
   
+  // 💡 로딩 상태 관리 추가
+  const [isLoading, setIsLoading] = useState(false);
+  
   // 상점 관련 상태
   const [isShopOpen, setIsShopOpen] = useState(false);
   const [currentBuyer, setCurrentBuyer] = useState(null);
@@ -21,11 +24,14 @@ function App() {
 
   // DB에서 유저 데이터 불러오기
   const fetchUsers = async () => {
+    setIsLoading(true); // 통신 시작 시 로딩 ON
     try {
       const res = await axios.get(`${API_URL}/users`);
       setUsers(res.data);
     } catch (err) {
       console.error("데이터 로드 실패", err);
+    } finally {
+      setIsLoading(false); // 성공/실패 여부 상관없이 통신 끝나면 로딩 OFF
     }
   };
 
@@ -48,25 +54,50 @@ function App() {
   const handleAddPlayer = async () => {
     const name = prompt("추가할 플레이어의 이름을 입력하세요:");
     if (!name) return;
-    await axios.post(`${API_URL}/users`, { name });
-    fetchUsers();
+    
+    setIsLoading(true);
+    try {
+      await axios.post(`${API_URL}/users`, { name });
+      await fetchUsers();
+    } catch (err) {
+      console.error(err);
+      setIsLoading(false);
+    }
   };
 
   const handleMatchResult = async (winnerId, loserId) => {
-    await axios.post(`${API_URL}/match`, { winnerId, loserId });
-    setSelectedIds([]);
-    fetchUsers();
+    setIsLoading(true);
+    try {
+      await axios.post(`${API_URL}/match`, { winnerId, loserId });
+      setSelectedIds([]);
+      await fetchUsers();
+    } catch (err) {
+      console.error(err);
+      setIsLoading(false);
+    }
   };
 
   const handleGlobalUndo = async () => {
-    await axios.post(`${API_URL}/undo`);
-    fetchUsers();
+    setIsLoading(true);
+    try {
+      await axios.post(`${API_URL}/undo`);
+      await fetchUsers();
+    } catch (err) {
+      console.error(err);
+      setIsLoading(false);
+    }
   };
 
   const handleResetAll = async () => {
     if (window.confirm("⚠️ 모든 기록을 초기화하시겠습니까? (명단 유지)")) {
-      await axios.post(`${API_URL}/reset`);
-      fetchUsers();
+      setIsLoading(true);
+      try {
+        await axios.post(`${API_URL}/reset`);
+        await fetchUsers();
+      } catch (err) {
+        console.error(err);
+        setIsLoading(false);
+      }
     }
   };
 
@@ -98,18 +129,19 @@ function App() {
     }
 
     if (window.confirm(`[${item.name}]을(를) ${item.cost}점에 구매하시겠습니까?`)) {
+      setIsLoading(true);
       try {
-        // 백엔드로 구매 요청 전송 (유저 ID와 소모할 비용)
         await axios.post(`${API_URL}/buy`, { 
           userId: currentBuyer.id, 
           cost: item.cost 
         });
         alert("구매 완료!");
-        fetchUsers(); // 승점 갱신을 위해 유저 목록 다시 불러오기
+        await fetchUsers(); 
         closeShop();
       } catch (err) {
         console.error("구매 실패", err);
         alert("구매 처리 중 오류가 발생했습니다.");
+        setIsLoading(false);
       }
     }
   };
@@ -126,6 +158,14 @@ function App() {
 
   return (
     <div className="App">
+      {/* 💡 로딩 중일 때 화면 전체를 덮는 오버레이 표시 */}
+      {isLoading && (
+        <div style={loadingOverlayStyle}>
+          <div style={spinnerStyle}></div>
+          <h3 style={{ color: '#2c3e50', marginTop: '15px' }}>DB와 통신 중입니다... ⏳</h3>
+        </div>
+      )}
+
       <div className="page">
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
           <h2>실시간 랭킹</h2>
@@ -218,7 +258,19 @@ function App() {
   );
 }
 
-// 모달창 스타일 (App.css에 넣어도 됩니다)
+// 💡 새롭게 추가된 로딩 오버레이 스타일
+const loadingOverlayStyle = {
+  position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+  backgroundColor: 'rgba(255, 255, 255, 0.8)', display: 'flex', flexDirection: 'column',
+  justifyContent: 'center', alignItems: 'center', zIndex: 9999, backdropFilter: 'blur(3px)'
+};
+
+const spinnerStyle = {
+  width: '50px', height: '50px', border: '5px solid #f3f3f3', borderTop: '5px solid #3498db',
+  borderRadius: '50%', animation: 'spin 1s linear infinite'
+};
+
+// 기존 모달창 스타일
 const modalOverlayStyle = {
   position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
   backgroundColor: 'rgba(0, 0, 0, 0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000
@@ -228,5 +280,17 @@ const modalContentStyle = {
   backgroundColor: 'white', padding: '25px', borderRadius: '8px',
   width: '350px', maxWidth: '90%', boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
 };
+
+// CSS 애니메이션용 스타일 주입 (회전하는 스피너)
+if (typeof document !== 'undefined') {
+  const style = document.createElement('style');
+  style.innerHTML = `
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  `;
+  document.head.appendChild(style);
+}
 
 export default App;
