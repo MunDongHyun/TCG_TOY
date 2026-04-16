@@ -101,10 +101,9 @@ app.post('/api/reset', async (req, res) => {
 
 
 // ==========================================
-// 🛒 [상점 관리 및 구매 API (수량 로직 추가)]
+// 🛒 [상점 관리 및 구매 내역 API]
 // ==========================================
 
-// 6. 전체 상품 목록 조회
 app.get('/api/shop', async (req, res) => {
   try {
     const [rows] = await pool.query('SELECT * FROM shop_items');
@@ -112,7 +111,6 @@ app.get('/api/shop', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 7. 새 상품 추가 (stock 포함)
 app.post('/api/shop', async (req, res) => {
   const { name, cost, stock } = req.body;
   try {
@@ -121,7 +119,6 @@ app.post('/api/shop', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 8. 기존 상품 내용 변경 (stock 포함)
 app.put('/api/shop/:id', async (req, res) => {
   const { id } = req.params;
   const { name, cost, stock } = req.body;
@@ -131,7 +128,6 @@ app.put('/api/shop/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 9. 상품 삭제
 app.delete('/api/shop/:id', async (req, res) => {
   const { id } = req.params;
   try {
@@ -140,29 +136,44 @@ app.delete('/api/shop/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 10. 상점 상품 구매 (포인트 확인 및 재고 1 차감)
+// 💡 상점 상품 구매 (구매 내역 저장 추가)
 app.post('/api/buy', async (req, res) => {
   const { userId, cost, itemId } = req.body;
   
   try {
-    // 1. 유저의 승점 확인
     const [users] = await pool.query('SELECT points FROM users WHERE id = ?', [userId]);
     if (users.length === 0) return res.status(404).json({ error: '유저를 찾을 수 없습니다.' });
     if (users[0].points < cost) return res.status(400).json({ error: '승점이 부족합니다.' });
 
-    // 2. 아이템 재고 확인
-    const [items] = await pool.query('SELECT stock FROM shop_items WHERE id = ?', [itemId]);
+    // 아이템 정보(이름, 재고) 가져오기
+    const [items] = await pool.query('SELECT name, stock FROM shop_items WHERE id = ?', [itemId]);
     if (items.length === 0) return res.status(404).json({ error: '상품을 찾을 수 없습니다.' });
     if (items[0].stock <= 0) return res.status(400).json({ error: '재고가 소진되었습니다.' });
 
-    // 3. 승점 차감 및 재고 1 차감
+    // 트랜잭션처럼 3가지 쿼리 실행
+    // 1. 유저 승점 차감
     await pool.query('UPDATE users SET points = points - ? WHERE id = ?', [cost, userId]);
+    // 2. 상점 재고 차감
     await pool.query('UPDATE shop_items SET stock = stock - 1 WHERE id = ?', [itemId]);
+    // 3. 구매 내역(purchase_history) 저장
+    await pool.query('INSERT INTO purchase_history (user_id, item_name, cost) VALUES (?, ?, ?)', [userId, items[0].name, cost]);
     
     res.json({ success: true, message: '구매 완료' });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'DB 업데이트 중 오류 발생' });
+  }
+});
+
+// 💡 특정 유저의 구매 내역 조회 API 추가
+app.get('/api/purchase-history/:userId', async (req, res) => {
+  const { userId } = req.params;
+  try {
+    // 최신 구매 내역이 가장 위로 오도록 내림차순(DESC) 정렬
+    const [rows] = await pool.query('SELECT * FROM purchase_history WHERE user_id = ? ORDER BY purchased_at DESC', [userId]);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

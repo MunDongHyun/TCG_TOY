@@ -19,15 +19,22 @@ export default function App() {
 }
 
 // ==========================================
-// [2] 메인 페이지 (색상 구분 기능 추가)
+// [2] 메인 페이지
 // ==========================================
 function MainPage() {
   const [users, setUsers] = useState([]);
   const [shopItems, setShopItems] = useState([]);
   const [selectedIds, setSelectedIds] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  
+  // 상점 모달 상태
   const [isShopOpen, setIsShopOpen] = useState(false);
   const [currentBuyer, setCurrentBuyer] = useState(null);
+
+  // 구매 내역 모달 상태
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [currentHistoryUser, setCurrentHistoryUser] = useState(null);
+  const [purchaseHistory, setPurchaseHistory] = useState([]);
 
   const fetchUsers = async () => {
     setIsLoading(true);
@@ -76,12 +83,8 @@ function MainPage() {
   };
 
   const handlePurchase = async (item) => {
-    if (currentBuyer.points < item.cost) {
-      return alert(`승점이 부족합니다! (현재: ${currentBuyer.points}점 / 필요: ${item.cost}점)`);
-    }
-    if (item.stock <= 0) {
-      return alert("재고가 모두 소진되었습니다!");
-    }
+    if (currentBuyer.points < item.cost) return alert(`승점이 부족합니다! (현재: ${currentBuyer.points}점 / 필요: ${item.cost}점)`);
+    if (item.stock <= 0) return alert("재고가 모두 소진되었습니다!");
 
     if (window.confirm(`[${item.name}]을(를) ${item.cost}점에 구매하시겠습니까? (남은 수량: ${item.stock}개)`)) {
       setIsLoading(true);
@@ -95,6 +98,22 @@ function MainPage() {
         alert(err.response?.data?.error || "구매 처리 중 오류 발생"); 
         setIsLoading(false); 
       }
+    }
+  };
+
+  // 구매 내역 불러오기 함수
+  const openHistory = async (user) => {
+    setCurrentHistoryUser(user);
+    setIsHistoryOpen(true);
+    setIsLoading(true);
+    try {
+      const res = await axios.get(`${API_URL}/purchase-history/${user.id}`);
+      setPurchaseHistory(res.data);
+    } catch (err) {
+      console.error(err);
+      alert("구매 내역을 불러오는데 실패했습니다.");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -131,24 +150,18 @@ function MainPage() {
 
       <table>
         <thead>
-          <tr><th>순위</th><th>이름</th><th>라운드</th><th>승/패</th><th>승률</th><th>연승</th><th>승점</th><th>상점</th></tr>
+          <tr><th>순위</th><th>이름</th><th>라운드</th><th>승/패</th><th>승률</th><th>연승</th><th>승점</th><th>상점/내역</th></tr>
         </thead>
         <tbody>
           {sortedUsers.map((u, i) => {
-            // 💡 선택된 순서에 따라 배경색 지정
             const isPlayerA = selectedIds[0] === u.id;
             const isPlayerB = selectedIds[1] === u.id;
-            
             let rowBgColor = 'transparent';
-            if (isPlayerA) rowBgColor = '#e3f2fd'; // 첫 번째 선택: 파란색 배경
-            if (isPlayerB) rowBgColor = '#fadbd8'; // 두 번째 선택: 빨간색 배경
+            if (isPlayerA) rowBgColor = '#e3f2fd';
+            if (isPlayerB) rowBgColor = '#fadbd8';
 
             return (
-              <tr 
-                key={u.id} 
-                onClick={() => toggleSelect(u.id)} 
-                style={{ backgroundColor: rowBgColor, cursor: 'pointer' }}
-              >
+              <tr key={u.id} onClick={() => toggleSelect(u.id)} style={{ backgroundColor: rowBgColor, cursor: 'pointer' }}>
                 <td>{i + 1}위</td>
                 <td>
                   <strong>{u.name}</strong>
@@ -160,13 +173,19 @@ function MainPage() {
                 <td>{(getWinRate(u)*100).toFixed(1)}%</td>
                 <td>{u.win_streak > 0 ? `${u.win_streak}연승 🔥` : '-'}</td>
                 <td style={{color:'#d35400', fontWeight:'bold'}}>{u.points}</td>
-                <td><button onClick={(e)=>{e.stopPropagation(); setCurrentBuyer(u); setIsShopOpen(true);}} style={{backgroundColor:'#8e44ad', fontSize:'12px'}}>🛒</button></td>
+                <td>
+                  {/* 상점 버튼 */}
+                  <button onClick={(e)=>{e.stopPropagation(); setCurrentBuyer(u); setIsShopOpen(true);}} style={{backgroundColor:'#8e44ad', fontSize:'12px', marginRight: '5px'}}>🛒</button>
+                  {/* 구매 내역 버튼 */}
+                  <button onClick={(e)=>{e.stopPropagation(); openHistory(u);}} style={{backgroundColor:'#2c3e50', fontSize:'12px'}}>📜 내역</button>
+                </td>
               </tr>
             );
           })}
         </tbody>
       </table>
 
+      {/* 상점 모달창 */}
       {isShopOpen && currentBuyer && (
         <div className="modal-overlay" style={modalOverlayStyle}>
           <div className="modal-content" style={modalContentStyle}>
@@ -194,12 +213,37 @@ function MainPage() {
           </div>
         </div>
       )}
+
+      {/* 💡 구매 내역 모달창 */}
+      {isHistoryOpen && currentHistoryUser && (
+        <div className="modal-overlay" style={modalOverlayStyle}>
+          <div className="modal-content" style={modalContentStyle}>
+            <h3>📜 {currentHistoryUser.name}님의 구매 내역</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '300px', overflowY: 'auto' }}>
+              {purchaseHistory.length > 0 ? (
+                purchaseHistory.map(hist => (
+                  <div key={hist.id} style={{ padding: '10px', borderBottom: '1px solid #ddd', fontSize: '14px' }}>
+                    <div style={{ fontWeight: 'bold', color: '#2c3e50' }}>{hist.item_name}</div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#7f8c8d', fontSize: '12px', marginTop: '4px' }}>
+                      <span>-{hist.cost}점</span>
+                      <span>{new Date(hist.purchased_at).toLocaleString('ko-KR')}</span>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p style={{ textAlign: 'center', color: '#7f8c8d', padding: '20px 0' }}>구매 내역이 없습니다.</p>
+              )}
+            </div>
+            <button onClick={() => setIsHistoryOpen(false)} style={{ marginTop: '20px', width: '100%', backgroundColor: '#7f8c8d' }}>닫기</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 // ==========================================
-// [3] 상점 아이템 관리자 페이지 (인라인 수정)
+// [3] 상점 아이템 관리자 페이지
 // ==========================================
 function ShopAdmin() {
   const [items, setItems] = useState([]);
