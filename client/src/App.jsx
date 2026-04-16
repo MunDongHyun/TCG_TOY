@@ -19,7 +19,7 @@ export default function App() {
 }
 
 // ==========================================
-// [2] 메인 페이지
+// [2] 메인 페이지 (누적 승점 랭킹 적용)
 // ==========================================
 function MainPage() {
   const [users, setUsers] = useState([]);
@@ -27,28 +27,22 @@ function MainPage() {
   const [selectedIds, setSelectedIds] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   
-  // 상점 모달 상태
   const [isShopOpen, setIsShopOpen] = useState(false);
   const [currentBuyer, setCurrentBuyer] = useState(null);
 
-  // 구매 내역 모달 상태
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [currentHistoryUser, setCurrentHistoryUser] = useState(null);
   const [purchaseHistory, setPurchaseHistory] = useState([]);
 
   const fetchUsers = async () => {
     setIsLoading(true);
-    try {
-      const res = await axios.get(`${API_URL}/users`);
-      setUsers(res.data);
-    } catch (err) { console.error(err); } finally { setIsLoading(false); }
+    try { const res = await axios.get(`${API_URL}/users`); setUsers(res.data); } 
+    catch (err) { console.error(err); } finally { setIsLoading(false); }
   };
 
   const fetchShopItems = async () => {
-    try {
-      const res = await axios.get(`${API_URL}/shop`);
-      setShopItems(res.data);
-    } catch (err) { console.error(err); }
+    try { const res = await axios.get(`${API_URL}/shop`); setShopItems(res.data); } 
+    catch (err) { console.error(err); }
   };
 
   useEffect(() => { fetchUsers(); fetchShopItems(); }, []);
@@ -83,7 +77,7 @@ function MainPage() {
   };
 
   const handlePurchase = async (item) => {
-    if (currentBuyer.points < item.cost) return alert(`승점이 부족합니다! (현재: ${currentBuyer.points}점 / 필요: ${item.cost}점)`);
+    if (currentBuyer.points < item.cost) return alert(`보유 승점이 부족합니다! (현재: ${currentBuyer.points}점 / 필요: ${item.cost}점)`);
     if (item.stock <= 0) return alert("재고가 모두 소진되었습니다!");
 
     if (window.confirm(`[${item.name}]을(를) ${item.cost}점에 구매하시겠습니까? (남은 수량: ${item.stock}개)`)) {
@@ -101,7 +95,6 @@ function MainPage() {
     }
   };
 
-  // 구매 내역 불러오기 함수
   const openHistory = async (user) => {
     setCurrentHistoryUser(user);
     setIsHistoryOpen(true);
@@ -110,7 +103,6 @@ function MainPage() {
       const res = await axios.get(`${API_URL}/purchase-history/${user.id}`);
       setPurchaseHistory(res.data);
     } catch (err) {
-      console.error(err);
       alert("구매 내역을 불러오는데 실패했습니다.");
     } finally {
       setIsLoading(false);
@@ -120,7 +112,14 @@ function MainPage() {
   const toggleSelect = (id) => setSelectedIds(prev => prev.includes(id) ? prev.filter(s => s !== id) : prev.length >= 2 ? [prev[1], id] : [...prev, id]);
   const getWinRate = (u) => (u.wins + u.losses > 0 ? (u.wins / (u.wins + u.losses)) : 0);
   
-  const sortedUsers = [...users].sort((a, b) => b.points !== a.points ? b.points - a.points : getWinRate(b) - getWinRate(a));
+  // 💡 정렬 기준을 보유 승점(points)이 아닌 누적 승점(total_points)으로 변경!
+  const sortedUsers = [...users].sort((a, b) => {
+    const aTotal = a.total_points ?? 0;
+    const bTotal = b.total_points ?? 0;
+    if (bTotal !== aTotal) return bTotal - aTotal;
+    return getWinRate(b) - getWinRate(a);
+  });
+
   const playerA = users.find(u => u.id === selectedIds[0]);
   const playerB = users.find(u => u.id === selectedIds[1]);
   const canUndo = users.some(u => u.history && u.history.length > 0);
@@ -150,7 +149,7 @@ function MainPage() {
 
       <table>
         <thead>
-          <tr><th>순위</th><th>이름</th><th>라운드</th><th>승/패</th><th>승률</th><th>연승</th><th>승점</th><th>상점/내역</th></tr>
+          <tr><th>순위</th><th>이름</th><th>라운드</th><th>승/패</th><th>승률</th><th>연승</th><th>누적 승점</th><th>보유 승점</th><th>상점/내역</th></tr>
         </thead>
         <tbody>
           {sortedUsers.map((u, i) => {
@@ -172,11 +171,15 @@ function MainPage() {
                 <td>{u.wins}승 / {u.losses}패</td>
                 <td>{(getWinRate(u)*100).toFixed(1)}%</td>
                 <td>{u.win_streak > 0 ? `${u.win_streak}연승 🔥` : '-'}</td>
-                <td style={{color:'#d35400', fontWeight:'bold'}}>{u.points}</td>
+                
+                {/* 💡 누적 승점 (랭킹용) */}
+                <td style={{color:'#c0392b', fontWeight:'bold'}}>{u.total_points ?? 0}점</td>
+                
+                {/* 💡 잔여/보유 승점 (쇼핑용) */}
+                <td style={{color:'#27ae60', fontWeight:'bold'}}>{u.points}점</td>
+                
                 <td>
-                  {/* 상점 버튼 */}
                   <button onClick={(e)=>{e.stopPropagation(); setCurrentBuyer(u); setIsShopOpen(true);}} style={{backgroundColor:'#8e44ad', fontSize:'12px', marginRight: '5px'}}>🛒</button>
-                  {/* 구매 내역 버튼 */}
                   <button onClick={(e)=>{e.stopPropagation(); openHistory(u);}} style={{backgroundColor:'#2c3e50', fontSize:'12px'}}>📜 내역</button>
                 </td>
               </tr>
@@ -185,11 +188,11 @@ function MainPage() {
         </tbody>
       </table>
 
-      {/* 상점 모달창 */}
       {isShopOpen && currentBuyer && (
         <div className="modal-overlay" style={modalOverlayStyle}>
           <div className="modal-content" style={modalContentStyle}>
-            <h3>🛒 {currentBuyer.name}님의 상점 (보유: {currentBuyer.points}점)</h3>
+            <h3>🛒 {currentBuyer.name}님의 상점</h3>
+            <p style={{marginTop: 0, color: '#27ae60', fontWeight: 'bold'}}>잔여 보유 승점: {currentBuyer.points}점</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               {shopItems.map(item => (
                 <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', border: '1px solid #ddd' }}>
@@ -214,7 +217,6 @@ function MainPage() {
         </div>
       )}
 
-      {/* 💡 구매 내역 모달창 */}
       {isHistoryOpen && currentHistoryUser && (
         <div className="modal-overlay" style={modalOverlayStyle}>
           <div className="modal-content" style={modalContentStyle}>
